@@ -1,6 +1,8 @@
 -- Initial data for composers table
 -- Famous classical composers with real historical data
 
+SET NAMES utf8mb4;
+
 INSERT INTO composers (name, short_name, birth_year, death_year, nationality) VALUES
 ('Johann Sebastian Bach', 'J.S. Bach', 1685, 1750, 'German'),
 ('Antonio Vivaldi', 'Vivaldi', 1678, 1741, 'Italian'),
