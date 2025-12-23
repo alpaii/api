@@ -15,20 +15,20 @@ router = APIRouter(
 @router.post("/", response_model=ComposerResponse, status_code=status.HTTP_201_CREATED)
 def create_composer(composer: ComposerCreate, db: Session = Depends(get_db)):
     """Create a new composer"""
+    # Check for duplicate full_name
+    existing_full_name = db.query(Composer).filter(Composer.full_name == composer.full_name).first()
+    if existing_full_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Composer with name '{composer.full_name}' already exists"
+        )
+
     # Check for duplicate name
     existing_name = db.query(Composer).filter(Composer.name == composer.name).first()
     if existing_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Composer with name '{composer.name}' already exists"
-        )
-
-    # Check for duplicate short_name
-    existing_short_name = db.query(Composer).filter(Composer.short_name == composer.short_name).first()
-    if existing_short_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Composer with short name '{composer.short_name}' already exists"
+            detail=f"Composer with short name '{composer.name}' already exists"
         )
 
     db_composer = Composer(**composer.model_dump())
@@ -41,7 +41,7 @@ def create_composer(composer: ComposerCreate, db: Session = Depends(get_db)):
 def read_composers(
     skip: int = 0,
     limit: int = 100,
-    search: Optional[str] = Query(None, description="Search composers by name, short_name, or nationality"),
+    search: Optional[str] = Query(None, description="Search composers by full_name, name, or nationality"),
     db: Session = Depends(get_db)
 ):
     """Get all composers with pagination and optional search, sorted by birth year"""
@@ -50,8 +50,8 @@ def read_composers(
     if search:
         search_pattern = f"%{search}%"
         query = query.filter(
+            (Composer.full_name.like(search_pattern)) |
             (Composer.name.like(search_pattern)) |
-            (Composer.short_name.like(search_pattern)) |
             (Composer.nationality.like(search_pattern))
         )
 
@@ -83,6 +83,18 @@ def update_composer(composer_id: int, composer: ComposerUpdate, db: Session = De
 
     update_data = composer.model_dump(exclude_unset=True)
 
+    # Check for duplicate full_name (if updating full_name)
+    if "full_name" in update_data and update_data["full_name"]:
+        existing_full_name = db.query(Composer).filter(
+            Composer.full_name == update_data["full_name"],
+            Composer.id != composer_id
+        ).first()
+        if existing_full_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Composer with name '{update_data['full_name']}' already exists"
+            )
+
     # Check for duplicate name (if updating name)
     if "name" in update_data and update_data["name"]:
         existing_name = db.query(Composer).filter(
@@ -92,19 +104,7 @@ def update_composer(composer_id: int, composer: ComposerUpdate, db: Session = De
         if existing_name:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Composer with name '{update_data['name']}' already exists"
-            )
-
-    # Check for duplicate short_name (if updating short_name)
-    if "short_name" in update_data and update_data["short_name"]:
-        existing_short_name = db.query(Composer).filter(
-            Composer.short_name == update_data["short_name"],
-            Composer.id != composer_id
-        ).first()
-        if existing_short_name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Composer with short name '{update_data['short_name']}' already exists"
+                detail=f"Composer with short name '{update_data['name']}' already exists"
             )
 
     for key, value in update_data.items():
