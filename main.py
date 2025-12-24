@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.routers import composers
 from app.database import engine, Base
@@ -24,6 +25,9 @@ app.add_middleware(
 
 # Include routers
 app.include_router(composers.router, prefix="/api")
+
+# Mount static files (must be after routers)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 def root():

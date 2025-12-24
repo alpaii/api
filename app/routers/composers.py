@@ -1,11 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import case
 from typing import List, Optional
+import os
+import uuid
+from pathlib import Path
 
 from app.database import get_db
 from app.models import Composer
 from app.schemas import ComposerCreate, ComposerUpdate, ComposerResponse
+
+# Directory for storing uploaded images
+UPLOAD_DIR = Path("static/images/composers")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter(
     prefix="/composers",
@@ -121,6 +128,42 @@ def delete_composer(composer_id: int, db: Session = Depends(get_db)):
     if db_composer is None:
         raise HTTPException(status_code=404, detail="Composer not found")
 
+    # Delete associated image file if it exists
+    if db_composer.image_url and db_composer.image_url.startswith("/static/"):
+        image_path = Path(db_composer.image_url.lstrip("/"))
+        if image_path.exists():
+            image_path.unlink()
+
     db.delete(db_composer)
     db.commit()
     return None
+
+@router.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    """Upload a composer image"""
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}"
+        )
+
+    # Generate unique filename
+    file_extension = file.filename.split(".")[-1]
+    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    file_path = UPLOAD_DIR / unique_filename
+
+    # Save file
+    try:
+        contents = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(contents)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload file: {str(e)}"
+        )
+
+    # Return the URL path
+    return {"image_url": f"/static/images/composers/{unique_filename}"}

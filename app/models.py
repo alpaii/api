@@ -10,3 +10,4 @@ class Composer(Base):
     birth_year = Column(Integer, nullable=True, comment="Year of birth")
     death_year = Column(Integer, nullable=True, comment="Year of death")
     nationality = Column(String(50), nullable=True, comment="Country of origin")
+    image_url = Column(String(255), nullable=True, comment="Profile image URL")

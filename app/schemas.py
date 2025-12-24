@@ -7,6 +7,7 @@ class ComposerBase(BaseModel):
     birth_year: Optional[int] = Field(None, description="Year of birth")
     death_year: Optional[int] = Field(None, description="Year of death")
     nationality: Optional[str] = Field(None, description="Country of origin", max_length=50)
+    image_url: Optional[str] = Field(None, description="Profile image URL", max_length=255)
 
 class ComposerCreate(ComposerBase):
     pass
@@ -17,6 +18,7 @@ class ComposerUpdate(BaseModel):
     birth_year: Optional[int] = None
     death_year: Optional[int] = None
     nationality: Optional[str] = Field(None, max_length=50)
+    image_url: Optional[str] = Field(None, max_length=255)
 
     class Config:
         # At least one field must be provided for update
