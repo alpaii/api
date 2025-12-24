@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
-from sqlalchemy import case
+from sqlalchemy import case, func
 from typing import List, Optional
 import os
 import uuid
 from pathlib import Path
 
 from app.database import get_db
-from app.models import Composer
+from app.models import Composer, Composition
 from app.schemas import ComposerCreate, ComposerUpdate, ComposerResponse
 
 # Directory for storing uploaded images
@@ -52,7 +52,11 @@ def read_composers(
     db: Session = Depends(get_db)
 ):
     """Get all composers with pagination and optional search, sorted by birth year"""
-    query = db.query(Composer)
+    # Query with composition count
+    query = db.query(
+        Composer,
+        func.count(Composition.id).label('composition_count')
+    ).outerjoin(Composition, Composer.id == Composition.composer_id).group_by(Composer.id)
 
     if search:
         search_pattern = f"%{search}%"
@@ -70,16 +74,50 @@ def read_composers(
         Composer.name.asc()
     )
 
-    composers = query.offset(skip).limit(limit).all()
+    results = query.offset(skip).limit(limit).all()
+
+    # Convert results to ComposerResponse with composition_count
+    composers = []
+    for composer, count in results:
+        composer_dict = {
+            "id": composer.id,
+            "full_name": composer.full_name,
+            "name": composer.name,
+            "birth_year": composer.birth_year,
+            "death_year": composer.death_year,
+            "nationality": composer.nationality,
+            "image_url": composer.image_url,
+            "composition_count": count
+        }
+        composers.append(ComposerResponse(**composer_dict))
+
     return composers
 
 @router.get("/{composer_id}", response_model=ComposerResponse)
 def read_composer(composer_id: int, db: Session = Depends(get_db)):
     """Get a specific composer by ID"""
-    composer = db.query(Composer).filter(Composer.id == composer_id).first()
-    if composer is None:
+    result = db.query(
+        Composer,
+        func.count(Composition.id).label('composition_count')
+    ).outerjoin(Composition, Composer.id == Composition.composer_id).filter(
+        Composer.id == composer_id
+    ).group_by(Composer.id).first()
+
+    if result is None:
         raise HTTPException(status_code=404, detail="Composer not found")
-    return composer
+
+    composer, count = result
+    composer_dict = {
+        "id": composer.id,
+        "full_name": composer.full_name,
+        "name": composer.name,
+        "birth_year": composer.birth_year,
+        "death_year": composer.death_year,
+        "nationality": composer.nationality,
+        "image_url": composer.image_url,
+        "composition_count": count
+    }
+    return ComposerResponse(**composer_dict)
 
 @router.put("/{composer_id}", response_model=ComposerResponse)
 def update_composer(composer_id: int, composer: ComposerUpdate, db: Session = Depends(get_db)):

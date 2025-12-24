@@ -1,6 +1,30 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
+# Composition schemas
+class CompositionBase(BaseModel):
+    composer_id: int = Field(..., description="Composer ID")
+    catalog_number: Optional[str] = Field(None, description="Catalog number (e.g., BWV 1060, K. 525)", max_length=50)
+    title: str = Field(..., description="Composition title", max_length=200)
+
+class CompositionCreate(CompositionBase):
+    pass
+
+class CompositionUpdate(BaseModel):
+    composer_id: Optional[int] = None
+    catalog_number: Optional[str] = Field(None, max_length=50)
+    title: Optional[str] = Field(None, max_length=200)
+
+    class Config:
+        min_properties = 1
+
+class CompositionResponse(CompositionBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+# Composer schemas
 class ComposerBase(BaseModel):
     full_name: str = Field(..., description="Full name in English", max_length=100)
     name: str = Field(..., description="Short name or nickname", max_length=50)
@@ -26,6 +50,13 @@ class ComposerUpdate(BaseModel):
 
 class ComposerResponse(ComposerBase):
     id: int
+    composition_count: int = Field(default=0, description="Number of compositions")
+
+    class Config:
+        from_attributes = True
+
+class ComposerWithCompositions(ComposerResponse):
+    compositions: List[CompositionResponse] = []
 
     class Config:
         from_attributes = True

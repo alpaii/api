@@ -26,3 +26,4 @@ wheels/
 .DS_Store
 *.db
 *.sqlite3
+프롬프트.txt

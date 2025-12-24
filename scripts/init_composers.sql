@@ -3,7 +3,7 @@
 
 SET NAMES utf8mb4;
 
-INSERT INTO composers (name, short_name, birth_year, death_year, nationality) VALUES
+INSERT INTO composers (full_name, name, birth_year, death_year, nationality) VALUES
 ('Johann Sebastian Bach', 'J.S. Bach', 1685, 1750, 'German'),
 ('Antonio Vivaldi', 'Vivaldi', 1678, 1741, 'Italian'),
 ('George Frideric Handel', 'Handel', 1685, 1759, 'German-British'),
