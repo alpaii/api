@@ -26,3 +26,13 @@ class Composition(Base):
 
     # Relationship
     composer = relationship("Composer", back_populates="compositions")
+
+class Artist(Base):
+    __tablename__ = "artists"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, comment="Artist name")
+    birth_year = Column(Integer, nullable=True, comment="Year of birth")
+    death_year = Column(Integer, nullable=True, comment="Year of death")
+    nationality = Column(String(50), nullable=True, comment="Country of origin")
+    instrument = Column(String(50), nullable=True, comment="Primary instrument")
