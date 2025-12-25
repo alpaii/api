@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import composers, compositions, artists
+from app.routers import composers, compositions, artists, recordings, albums
 from app.database import engine, Base
 
 # Create database tables
@@ -27,6 +27,8 @@ app.add_middleware(
 app.include_router(composers.router, prefix="/api")
 app.include_router(compositions.router, prefix="/api")
 app.include_router(artists.router, prefix="/api")
+app.include_router(recordings.router, prefix="/api")
+app.include_router(albums.router, prefix="/api")
 
 # Mount static files (must be after routers)
 app.mount("/static", StaticFiles(directory="static"), name="static")

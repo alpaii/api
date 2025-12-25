@@ -87,3 +87,66 @@ class ArtistResponse(ArtistBase):
 
     class Config:
         from_attributes = True
+
+# Recording schemas
+class RecordingBase(BaseModel):
+    composition_id: int = Field(..., description="Composition ID")
+    year: Optional[int] = Field(None, description="Recording year")
+
+class RecordingCreate(RecordingBase):
+    artist_ids: List[int] = Field(..., description="List of artist IDs")
+
+class RecordingUpdate(BaseModel):
+    composition_id: Optional[int] = None
+    year: Optional[int] = None
+    artist_ids: Optional[List[int]] = None
+
+    class Config:
+        min_properties = 1
+
+class RecordingResponse(RecordingBase):
+    id: int
+    artists: List[ArtistResponse] = []
+
+    class Config:
+        from_attributes = True
+
+# Album Image schemas
+class AlbumImageBase(BaseModel):
+    image_url: str = Field(..., description="Image URL or Base64 data")
+    is_primary: int = Field(0, description="Is primary image (1 or 0)")
+
+class AlbumImageResponse(AlbumImageBase):
+    id: int
+    album_id: int
+
+    class Config:
+        from_attributes = True
+
+# Album schemas
+class AlbumBase(BaseModel):
+    title: str = Field(..., description="Album title", max_length=200)
+    album_type: str = Field(default="LP", description="Album type (LP or CD)", max_length=20)
+
+class AlbumCreate(AlbumBase):
+    recording_ids: List[int] = Field(..., description="List of recording IDs")
+    image_urls: List[str] = Field(default=[], description="List of image URLs")
+    primary_image_index: Optional[int] = Field(None, description="Index of primary image (0-based)")
+
+class AlbumUpdate(BaseModel):
+    title: Optional[str] = Field(None, max_length=200)
+    album_type: Optional[str] = Field(None, max_length=20)
+    recording_ids: Optional[List[int]] = None
+    image_urls: Optional[List[str]] = None
+    primary_image_index: Optional[int] = None
+
+    class Config:
+        min_properties = 1
+
+class AlbumResponse(AlbumBase):
+    id: int
+    recordings: List[RecordingResponse] = []
+    images: List[AlbumImageResponse] = []
+
+    class Config:
+        from_attributes = True
