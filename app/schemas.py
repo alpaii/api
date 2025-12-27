@@ -20,6 +20,8 @@ class CompositionUpdate(BaseModel):
 
 class CompositionResponse(CompositionBase):
     id: int
+    sort_order: Optional[int] = None
+    recording_count: int = Field(default=0, description="Number of recordings")
 
     class Config:
         from_attributes = True
@@ -84,6 +86,7 @@ class ArtistUpdate(BaseModel):
 
 class ArtistResponse(ArtistBase):
     id: int
+    recording_count: int = Field(default=0, description="Number of recordings")
 
     class Config:
         from_attributes = True

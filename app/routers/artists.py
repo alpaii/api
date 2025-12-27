@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import case
+from sqlalchemy import func
 from typing import List, Optional
 
 from app.database import get_db
-from app.models import Artist
+from app.models import Artist, Recording, recording_artists
 from app.schemas import ArtistCreate, ArtistUpdate, ArtistResponse
 
 router = APIRouter(
@@ -36,8 +36,25 @@ def read_artists(
     search: Optional[str] = Query(None, description="Search artists by name, nationality, or instrument"),
     db: Session = Depends(get_db)
 ):
-    """Get all artists with pagination and optional search, sorted by birth year"""
-    query = db.query(Artist)
+    """Get all artists with pagination and optional search, sorted by name"""
+    # Subquery to count recordings per artist
+    recording_count_subquery = (
+        db.query(
+            recording_artists.c.artist_id,
+            func.count(recording_artists.c.recording_id).label('recording_count')
+        )
+        .group_by(recording_artists.c.artist_id)
+        .subquery()
+    )
+
+    # Main query with left join to get recording count
+    query = db.query(
+        Artist,
+        func.coalesce(recording_count_subquery.c.recording_count, 0).label('recording_count')
+    ).outerjoin(
+        recording_count_subquery,
+        Artist.id == recording_count_subquery.c.artist_id
+    )
 
     if search:
         search_pattern = f"%{search}%"
@@ -47,14 +64,25 @@ def read_artists(
             (Artist.instrument.like(search_pattern))
         )
 
-    # Sort by birth_year ascending (nulls last using CASE), then by name
-    query = query.order_by(
-        case((Artist.birth_year.is_(None), 1), else_=0),
-        Artist.birth_year.asc(),
-        Artist.name.asc()
-    )
+    # Sort by name ascending
+    query = query.order_by(Artist.name.asc())
 
-    artists = query.offset(skip).limit(limit).all()
+    results = query.offset(skip).limit(limit).all()
+
+    # Convert results to response format
+    artists = []
+    for artist, recording_count in results:
+        artist_dict = {
+            "id": artist.id,
+            "name": artist.name,
+            "birth_year": artist.birth_year,
+            "death_year": artist.death_year,
+            "nationality": artist.nationality,
+            "instrument": artist.instrument,
+            "recording_count": recording_count
+        }
+        artists.append(artist_dict)
+
     return artists
 
 @router.get("/{artist_id}", response_model=ArtistResponse)

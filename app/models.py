@@ -39,6 +39,7 @@ class Composition(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     composer_id = Column(Integer, ForeignKey("composers.id", ondelete="CASCADE"), nullable=False, comment="Composer ID")
     catalog_number = Column(String(50), nullable=True, comment="Catalog number (e.g., BWV 1060, K. 525)")
+    sort_order = Column(Integer, nullable=True, comment="Numeric value extracted from catalog number for sorting")
     title = Column(String(200), nullable=False, comment="Composition title")
 
     # Relationship

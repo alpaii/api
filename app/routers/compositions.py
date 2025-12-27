@@ -1,10 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
+import re
 
 from app.database import get_db
-from app.models import Composition, Composer
+from app.models import Composition, Composer, Recording
 from app.schemas import CompositionCreate, CompositionUpdate, CompositionResponse
+
+def extract_sort_order(catalog_number: Optional[str]) -> Optional[int]:
+    """Extract numeric value from catalog number for sorting"""
+    if not catalog_number:
+        return None
+    # Extract first sequence of digits from the catalog number
+    match = re.search(r'\d+', catalog_number)
+    if match:
+        try:
+            return int(match.group())
+        except ValueError:
+            return None
+    return None
 
 router = APIRouter(
     prefix="/compositions",
@@ -22,7 +37,10 @@ def create_composition(composition: CompositionCreate, db: Session = Depends(get
             detail=f"Composer with id {composition.composer_id} not found"
         )
 
-    db_composition = Composition(**composition.model_dump())
+    data = composition.model_dump()
+    data['sort_order'] = extract_sort_order(data.get('catalog_number'))
+
+    db_composition = Composition(**data)
     db.add(db_composition)
     db.commit()
     db.refresh(db_composition)
@@ -37,7 +55,24 @@ def read_compositions(
     db: Session = Depends(get_db)
 ):
     """Get all compositions with pagination and optional filters"""
-    query = db.query(Composition)
+    # Subquery to count recordings per composition
+    recording_count_subquery = (
+        db.query(
+            Recording.composition_id,
+            func.count(Recording.id).label('recording_count')
+        )
+        .group_by(Recording.composition_id)
+        .subquery()
+    )
+
+    # Main query with left join to get recording count
+    query = db.query(
+        Composition,
+        func.coalesce(recording_count_subquery.c.recording_count, 0).label('recording_count')
+    ).outerjoin(
+        recording_count_subquery,
+        Composition.id == recording_count_subquery.c.composition_id
+    )
 
     if composer_id:
         query = query.filter(Composition.composer_id == composer_id)
@@ -49,13 +84,31 @@ def read_compositions(
             (Composition.catalog_number.like(search_pattern))
         )
 
-    # Order by composer_id, then catalog_number
+    # Order by composer_id, then sort_order (nulls last using CASE), then catalog_number
+    # MySQL doesn't support NULLS LAST, so we use CASE to put nulls at the end
+    from sqlalchemy import case
     query = query.order_by(
         Composition.composer_id.asc(),
+        case((Composition.sort_order.is_(None), 1), else_=0),
+        Composition.sort_order.asc(),
         Composition.catalog_number.asc()
     )
 
-    compositions = query.offset(skip).limit(limit).all()
+    results = query.offset(skip).limit(limit).all()
+
+    # Convert results to response format
+    compositions = []
+    for composition, recording_count in results:
+        comp_dict = {
+            "id": composition.id,
+            "composer_id": composition.composer_id,
+            "catalog_number": composition.catalog_number,
+            "sort_order": composition.sort_order,
+            "title": composition.title,
+            "recording_count": recording_count
+        }
+        compositions.append(comp_dict)
+
     return compositions
 
 @router.get("/{composition_id}", response_model=CompositionResponse)
@@ -83,6 +136,10 @@ def update_composition(composition_id: int, composition: CompositionUpdate, db: 
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Composer with id {update_data['composer_id']} not found"
             )
+
+    # Update sort_order if catalog_number is being updated
+    if "catalog_number" in update_data:
+        update_data['sort_order'] = extract_sort_order(update_data['catalog_number'])
 
     for key, value in update_data.items():
         setattr(db_composition, key, value)

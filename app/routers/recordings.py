@@ -50,6 +50,7 @@ def read_recordings(
     skip: int = 0,
     limit: int = 100,
     composition_id: Optional[int] = Query(None, description="Filter by composition ID"),
+    composer_id: Optional[int] = Query(None, description="Filter by composer ID"),
     artist_id: Optional[int] = Query(None, description="Filter by artist ID"),
     db: Session = Depends(get_db)
 ):
@@ -58,6 +59,9 @@ def read_recordings(
 
     if composition_id:
         query = query.filter(Recording.composition_id == composition_id)
+
+    if composer_id:
+        query = query.join(Composition).filter(Composition.composer_id == composer_id)
 
     if artist_id:
         query = query.join(Recording.artists).filter(Artist.id == artist_id)
