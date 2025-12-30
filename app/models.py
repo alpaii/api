@@ -8,7 +8,8 @@ recording_artists = Table(
     'recording_artists',
     Base.metadata,
     Column('recording_id', Integer, ForeignKey('recordings.id', ondelete='CASCADE'), primary_key=True),
-    Column('artist_id', Integer, ForeignKey('artists.id', ondelete='CASCADE'), primary_key=True)
+    Column('artist_id', Integer, ForeignKey('artists.id', ondelete='CASCADE'), primary_key=True),
+    Column('artist_order', Integer, nullable=False, default=0, comment="Order of artist in the recording")
 )
 
 # Association table for many-to-many relationship between albums and recordings
@@ -67,7 +68,12 @@ class Recording(Base):
 
     # Relationships
     composition = relationship("Composition")
-    artists = relationship("Artist", secondary=recording_artists, back_populates="recordings")
+    artists = relationship(
+        "Artist",
+        secondary=recording_artists,
+        back_populates="recordings",
+        order_by=recording_artists.c.artist_order
+    )
     albums = relationship("Album", secondary=album_recordings, back_populates="recordings")
 
 class Album(Base):

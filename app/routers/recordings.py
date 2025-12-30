@@ -38,9 +38,20 @@ def create_recording(recording: RecordingCreate, db: Session = Depends(get_db)):
         composition_id=recording.composition_id,
         year=recording.year
     )
-    db_recording.artists = artists
-
     db.add(db_recording)
+    db.flush()  # Get the recording ID before adding artists
+
+    # Add artists in the specified order
+    from app.models import recording_artists
+    for order, artist_id in enumerate(recording.artist_ids):
+        db.execute(
+            recording_artists.insert().values(
+                recording_id=db_recording.id,
+                artist_id=artist_id,
+                artist_order=order
+            )
+        )
+
     db.commit()
     db.refresh(db_recording)
     return db_recording
@@ -106,7 +117,24 @@ def update_recording(recording_id: int, recording: RecordingUpdate, db: Session 
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Artists with ids {missing_ids} not found"
                 )
-            db_recording.artists = artists
+
+            # Delete existing artist associations
+            from app.models import recording_artists
+            db.execute(
+                recording_artists.delete().where(
+                    recording_artists.c.recording_id == recording_id
+                )
+            )
+
+            # Add artists in the new order
+            for order, artist_id in enumerate(artist_ids):
+                db.execute(
+                    recording_artists.insert().values(
+                        recording_id=recording_id,
+                        artist_id=artist_id,
+                        artist_order=order
+                    )
+                )
 
     # Verify composition if being updated
     if "composition_id" in update_data and update_data["composition_id"] is not None:
