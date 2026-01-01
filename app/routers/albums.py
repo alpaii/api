@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 
 from app.database import get_db
-from app.models import Album, AlbumImage, Recording
+from app.models import Album, AlbumImage, Recording, AlbumCustomUrl
 from app.schemas import AlbumCreate, AlbumUpdate, AlbumResponse
 
 router = APIRouter(
@@ -29,13 +29,25 @@ def create_album(album: AlbumCreate, db: Session = Depends(get_db)):
 
     # Create album
     db_album = Album(
-        title=album.title,
-        album_type=album.album_type
+        album_type=album.album_type,
+        discogs_url=album.discogs_url,
+        goclassic_url=album.goclassic_url,
+        memo=album.memo
     )
-    db_album.recordings = recordings
-
     db.add(db_album)
-    db.flush()  # Get album ID before adding images
+    db.flush()  # Get album ID before adding recordings, images, and custom URLs
+
+    # Add recordings in the specified order
+    if album.recording_ids:
+        from app.models import album_recordings
+        for order, recording_id in enumerate(album.recording_ids):
+            db.execute(
+                album_recordings.insert().values(
+                    album_id=db_album.id,
+                    recording_id=recording_id,
+                    recording_order=order
+                )
+            )
 
     # Add images
     if album.image_urls:
@@ -48,6 +60,27 @@ def create_album(album: AlbumCreate, db: Session = Depends(get_db)):
             )
             db.add(db_image)
 
+    # Add custom URLs
+    if album.custom_urls:
+        for custom_url_data in album.custom_urls:
+            # Handle both dict and Pydantic model
+            if isinstance(custom_url_data, dict):
+                url_name = custom_url_data.get("url_name")
+                url = custom_url_data.get("url")
+                url_order = custom_url_data.get("url_order", 0)
+            else:
+                url_name = custom_url_data.url_name
+                url = custom_url_data.url
+                url_order = custom_url_data.url_order
+
+            db_custom_url = AlbumCustomUrl(
+                album_id=db_album.id,
+                url_name=url_name,
+                url=url,
+                url_order=url_order
+            )
+            db.add(db_custom_url)
+
     db.commit()
     db.refresh(db_album)
     return db_album
@@ -57,21 +90,17 @@ def read_albums(
     skip: int = 0,
     limit: int = 100,
     album_type: Optional[str] = Query(None, description="Filter by album type (LP or CD)"),
-    search: Optional[str] = Query(None, description="Search by title"),
     db: Session = Depends(get_db)
 ):
     """Get all albums with pagination and optional filters"""
     query = db.query(Album).options(
         joinedload(Album.recordings).joinedload(Recording.artists),
-        joinedload(Album.images)
+        joinedload(Album.images),
+        joinedload(Album.custom_urls)
     )
 
     if album_type:
         query = query.filter(Album.album_type == album_type)
-
-    if search:
-        search_pattern = f"%{search}%"
-        query = query.filter(Album.title.like(search_pattern))
 
     # Sort by ID descending (most recent first)
     query = query.order_by(Album.id.desc())
@@ -84,7 +113,8 @@ def read_album(album_id: int, db: Session = Depends(get_db)):
     """Get a specific album by ID"""
     album = db.query(Album).options(
         joinedload(Album.recordings).joinedload(Recording.artists),
-        joinedload(Album.images)
+        joinedload(Album.images),
+        joinedload(Album.custom_urls)
     ).filter(Album.id == album_id).first()
 
     if album is None:
@@ -96,7 +126,8 @@ def update_album(album_id: int, album: AlbumUpdate, db: Session = Depends(get_db
     """Update an album"""
     db_album = db.query(Album).options(
         joinedload(Album.recordings).joinedload(Recording.artists),
-        joinedload(Album.images)
+        joinedload(Album.images),
+        joinedload(Album.custom_urls)
     ).filter(Album.id == album_id).first()
 
     if db_album is None:
@@ -117,7 +148,24 @@ def update_album(album_id: int, album: AlbumUpdate, db: Session = Depends(get_db
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Recordings with ids {missing_ids} not found"
                 )
-            db_album.recordings = recordings
+
+            # Delete existing recording associations
+            from app.models import album_recordings
+            db.execute(
+                album_recordings.delete().where(
+                    album_recordings.c.album_id == album_id
+                )
+            )
+
+            # Add recordings in the new order
+            for order, recording_id in enumerate(recording_ids):
+                db.execute(
+                    album_recordings.insert().values(
+                        album_id=album_id,
+                        recording_id=recording_id,
+                        recording_order=order
+                    )
+                )
 
     # Handle image_urls separately
     if "image_urls" in update_data:
@@ -139,6 +187,33 @@ def update_album(album_id: int, album: AlbumUpdate, db: Session = Depends(get_db
                 db.add(db_image)
     elif "primary_image_index" in update_data:
         update_data.pop("primary_image_index")
+
+    # Handle custom_urls separately
+    if "custom_urls" in update_data:
+        custom_urls = update_data.pop("custom_urls")
+        if custom_urls is not None:
+            # Remove existing custom URLs
+            db.query(AlbumCustomUrl).filter(AlbumCustomUrl.album_id == album_id).delete()
+
+            # Add new custom URLs
+            for custom_url_data in custom_urls:
+                # Handle both dict and Pydantic model
+                if isinstance(custom_url_data, dict):
+                    url_name = custom_url_data.get("url_name")
+                    url = custom_url_data.get("url")
+                    url_order = custom_url_data.get("url_order", 0)
+                else:
+                    url_name = custom_url_data.url_name
+                    url = custom_url_data.url
+                    url_order = custom_url_data.url_order
+
+                db_custom_url = AlbumCustomUrl(
+                    album_id=album_id,
+                    url_name=url_name,
+                    url=url,
+                    url_order=url_order
+                )
+                db.add(db_custom_url)
 
     # Update other fields
     for key, value in update_data.items():

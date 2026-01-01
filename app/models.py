@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -17,7 +17,8 @@ album_recordings = Table(
     'album_recordings',
     Base.metadata,
     Column('album_id', Integer, ForeignKey('albums.id', ondelete='CASCADE'), primary_key=True),
-    Column('recording_id', Integer, ForeignKey('recordings.id', ondelete='CASCADE'), primary_key=True)
+    Column('recording_id', Integer, ForeignKey('recordings.id', ondelete='CASCADE'), primary_key=True),
+    Column('recording_order', Integer, nullable=False, default=0, comment="Order of recording in the album")
 )
 
 class Composer(Base):
@@ -36,6 +37,10 @@ class Composer(Base):
 
 class Composition(Base):
     __tablename__ = "compositions"
+    __table_args__ = (
+        UniqueConstraint('composer_id', 'title', name='uq_composer_title'),
+        UniqueConstraint('composer_id', 'catalog_number', name='uq_composer_catalog'),
+    )
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     composer_id = Column(Integer, ForeignKey("composers.id", ondelete="CASCADE"), nullable=False, comment="Composer ID")
@@ -80,12 +85,20 @@ class Album(Base):
     __tablename__ = "albums"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    title = Column(String(200), nullable=False, comment="Album title")
     album_type = Column(String(20), nullable=False, default="LP", comment="Album type (LP or CD)")
+    discogs_url = Column(String(255), nullable=True, comment="Discogs URL")
+    goclassic_url = Column(String(255), nullable=True, comment="GoClassic URL")
+    memo = Column(String(1000), nullable=True, comment="Album memo")
 
     # Relationships
-    recordings = relationship("Recording", secondary=album_recordings, back_populates="albums")
+    recordings = relationship(
+        "Recording",
+        secondary=album_recordings,
+        back_populates="albums",
+        order_by=album_recordings.c.recording_order
+    )
     images = relationship("AlbumImage", back_populates="album", cascade="all, delete-orphan")
+    custom_urls = relationship("AlbumCustomUrl", back_populates="album", cascade="all, delete-orphan", order_by="AlbumCustomUrl.url_order")
 
 class AlbumImage(Base):
     __tablename__ = "album_images"
@@ -97,3 +110,15 @@ class AlbumImage(Base):
 
     # Relationship
     album = relationship("Album", back_populates="images")
+
+class AlbumCustomUrl(Base):
+    __tablename__ = "album_custom_urls"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    album_id = Column(Integer, ForeignKey("albums.id", ondelete="CASCADE"), nullable=False, comment="Album ID")
+    url_name = Column(String(100), nullable=False, comment="Display name for the URL")
+    url = Column(String(255), nullable=False, comment="The URL")
+    url_order = Column(Integer, nullable=False, default=0, comment="Order of URL in the album")
+
+    # Relationship
+    album = relationship("Album", back_populates="custom_urls")

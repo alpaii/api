@@ -37,6 +37,29 @@ def create_composition(composition: CompositionCreate, db: Session = Depends(get
             detail=f"Composer with id {composition.composer_id} not found"
         )
 
+    # Check for duplicate title within the same composer
+    existing_title = db.query(Composition).filter(
+        Composition.composer_id == composition.composer_id,
+        Composition.title == composition.title
+    ).first()
+    if existing_title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Composition with title '{composition.title}' already exists for this composer"
+        )
+
+    # Check for duplicate catalog number within the same composer
+    if composition.catalog_number:
+        existing_catalog = db.query(Composition).filter(
+            Composition.composer_id == composition.composer_id,
+            Composition.catalog_number == composition.catalog_number
+        ).first()
+        if existing_catalog:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Composition with catalog number '{composition.catalog_number}' already exists for this composer"
+            )
+
     data = composition.model_dump()
     data['sort_order'] = extract_sort_order(data.get('catalog_number'))
 
@@ -135,6 +158,38 @@ def update_composition(composition_id: int, composition: CompositionUpdate, db: 
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Composer with id {update_data['composer_id']} not found"
+            )
+
+    # Check for duplicate title within the same composer
+    if "title" in update_data:
+        # Determine the composer_id to check against
+        composer_id_to_check = update_data.get("composer_id", db_composition.composer_id)
+
+        existing_title = db.query(Composition).filter(
+            Composition.composer_id == composer_id_to_check,
+            Composition.title == update_data["title"],
+            Composition.id != composition_id  # Exclude current composition
+        ).first()
+        if existing_title:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Composition with title '{update_data['title']}' already exists for this composer"
+            )
+
+    # Check for duplicate catalog number within the same composer
+    if "catalog_number" in update_data and update_data["catalog_number"]:
+        # Determine the composer_id to check against
+        composer_id_to_check = update_data.get("composer_id", db_composition.composer_id)
+
+        existing_catalog = db.query(Composition).filter(
+            Composition.composer_id == composer_id_to_check,
+            Composition.catalog_number == update_data["catalog_number"],
+            Composition.id != composition_id  # Exclude current composition
+        ).first()
+        if existing_catalog:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Composition with catalog number '{update_data['catalog_number']}' already exists for this composer"
             )
 
     # Update sort_order if catalog_number is being updated

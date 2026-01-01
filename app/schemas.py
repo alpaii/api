@@ -126,22 +126,41 @@ class AlbumImageResponse(AlbumImageBase):
     class Config:
         from_attributes = True
 
+# Album Custom URL schemas
+class AlbumCustomUrlBase(BaseModel):
+    url_name: str = Field(..., description="Display name for the URL", max_length=100)
+    url: str = Field(..., description="The URL", max_length=255)
+    url_order: int = Field(default=0, description="Order of URL in the album")
+
+class AlbumCustomUrlResponse(AlbumCustomUrlBase):
+    id: int
+    album_id: int
+
+    class Config:
+        from_attributes = True
+
 # Album schemas
 class AlbumBase(BaseModel):
-    title: str = Field(..., description="Album title", max_length=200)
     album_type: str = Field(default="LP", description="Album type (LP or CD)", max_length=20)
+    discogs_url: Optional[str] = Field(None, description="Discogs URL", max_length=255)
+    goclassic_url: Optional[str] = Field(None, description="GoClassic URL", max_length=255)
+    memo: Optional[str] = Field(None, description="Album memo", max_length=1000)
 
 class AlbumCreate(AlbumBase):
     recording_ids: List[int] = Field(..., description="List of recording IDs")
     image_urls: List[str] = Field(default=[], description="List of image URLs")
     primary_image_index: Optional[int] = Field(None, description="Index of primary image (0-based)")
+    custom_urls: List[AlbumCustomUrlBase] = Field(default=[], description="List of custom URLs")
 
 class AlbumUpdate(BaseModel):
-    title: Optional[str] = Field(None, max_length=200)
     album_type: Optional[str] = Field(None, max_length=20)
+    discogs_url: Optional[str] = Field(None, max_length=255)
+    goclassic_url: Optional[str] = Field(None, max_length=255)
+    memo: Optional[str] = Field(None, max_length=1000)
     recording_ids: Optional[List[int]] = None
     image_urls: Optional[List[str]] = None
     primary_image_index: Optional[int] = None
+    custom_urls: Optional[List[AlbumCustomUrlBase]] = None
 
     class Config:
         min_properties = 1
@@ -150,6 +169,7 @@ class AlbumResponse(AlbumBase):
     id: int
     recordings: List[RecordingResponse] = []
     images: List[AlbumImageResponse] = []
+    custom_urls: List[AlbumCustomUrlResponse] = []
 
     class Config:
         from_attributes = True
